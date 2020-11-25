@@ -19,6 +19,7 @@ bot = telebot.TeleBot(config.token)
 day = ''
 day_delete = ''
 
+
 WEBHOOK_HOST = 'scheduler.hmainnetwork.keenetic.pro'
 WEBHOOK_PORT = 8443  # 443, 80, 88 или 8443 (порт должен быть открыт!)
 WEBHOOK_LISTEN = '0.0.0.0'  # На некоторых серверах придется указывать такой же IP, что и выше
@@ -27,12 +28,13 @@ WEBHOOK_SSL_CERT = '/home/webhook_cert.pem'  # Путь к сертификат�
 WEBHOOK_SSL_PRIV = '/home/webhook_pkey.pem'  # Путь к приватному ключу
 
 WEBHOOK_URL_BASE = "https://%s:%s" % (WEBHOOK_HOST, WEBHOOK_PORT)
-WEBHOOK_URL_PATH = "/%s/" % (bot)
+WEBHOOK_URL_PATH = "/%s/" % (config.token)
 
 
 class WebhookServer(object):
     @cherrypy.expose
     def index(self):
+        tmpl = loader.load('index.html')
         if 'content-length' in cherrypy.request.headers and \
                         'content-type' in cherrypy.request.headers and \
                         cherrypy.request.headers['content-type'] == 'application/json':
@@ -41,29 +43,9 @@ class WebhookServer(object):
             update = telebot.types.Update.de_json(json_string)
             # Эта функция обеспечивает проверку входящего сообщения
             bot.process_new_updates([update])
-            return ''
+            #return ''
         else:
             raise cherrypy.HTTPError(403)
-
-
-
-bot.remove_webhook()
-
-# Ставим заново вебхук
-bot.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH,
-                certificate=open(WEBHOOK_SSL_CERT, 'r'))
-
-cherrypy.config.update({
-    'server.socket_host': WEBHOOK_LISTEN,
-    'server.socket_port': WEBHOOK_PORT,
-    'server.ssl_module': 'builtin',
-    'server.ssl_certificate': WEBHOOK_SSL_CERT,
-    'server.ssl_private_key': WEBHOOK_SSL_PRIV
-})
-
- # Собственно, запуск!
-cherrypy.quickstart(WebhookServer(), WEBHOOK_URL_PATH, {'/': {}})
-
 
 
 # @bot.message_handler(content_types=["text"])
@@ -158,14 +140,26 @@ def schedule_read(message):
             get_ID = db_worker.getID(userID)
             get_ID = "{}".format(''.join(str(x) for x in get_ID).replace('(', '').replace(')', '').replace('\'', '')[:-1])
             read_from_DB = db_worker.read_my_data(username, get_ID)
-            bot.send_message(message.chat.id,
+            last_name = message.contact.last_name
+            if last_name != None:
+                bot.send_message(message.chat.id,
                          "У вас запланированы прогулки с {} {} на следующие дни: {}  ".format(
                              message.contact.first_name,
-                             message.contact.last_name)[:-2],
+                             message.contact.last_name,
                          ''.join(str(x) for x in read_from_DB).
                          replace('(', '').replace(')', '').
-                         replace('\'', '').replace(',', ', ')[:-2],
+                         replace('\'', '').replace(',', ', ')[:-2])
                          )
+            else:
+                last_name = ""
+                bot.send_message(message.chat.id,
+                                 "У вас запланированы прогулки с {} {} на следующие дни: {}  ".format(
+                                     message.contact.first_name,
+                                     last_name,
+                                     ''.join(str(x) for x in read_from_DB).
+                                         replace('(', '').replace(')', '').
+                                         replace('\'', '').replace(',', ', ')[:-2])
+                                 )
             db_worker.close()
         elif (message.content_type == 'text') & (message.text.startswith('@')):
             chat_id = message.chat.id
@@ -181,12 +175,22 @@ def schedule_read(message):
                 ''.join(str(x) for x in getUserID).replace('(', '').replace(')', '').replace('\'', '')[:-1])
             read_from_DB = db_worker.read_my_data(username, get_ID)
             user_with = bot.get_chat_member(get_ID, getUserID)
-            bot.send_message(message.chat.id,
+            last_name = user_with.user.last_name
+            if last_name != None:
+                bot.send_message(message.chat.id,
                          "У вас запланированы прогулки с {} {} на следующие дни: {}  ".format(
                              user_with.user.first_name, user_with.user.last_name,
                              ''.join(str(x) for x in read_from_DB).
                                  replace('(', '').replace(')', '').
                                  replace('\'', '').replace(',', ', ')[:-2]))
+            else:
+                last_name = ""
+                bot.send_message(message.chat.id,
+                                 "У вас запланированы прогулки с {} {} на следующие дни: {}  ".format(
+                                     user_with.user.first_name, user_with.user.last_name,
+                                     ''.join(str(x) for x in read_from_DB).
+                                         replace('(', '').replace(')', '').
+                                         replace('\'', '').replace(',', ', ')[:-2]))
             db_worker.close()
         elif (message.content_type != 'contact') & (message.text != '/cancel') & (message.text.startswith('@') == False):
             chat_id = message.chat.id
@@ -196,6 +200,7 @@ def schedule_read(message):
             msg = bot.reply_to(message, "Отправляю в начало, воспользуйся /start")
             bot.register_next_step_handler(msg, start)
     except Exception as e:
+        print(e)
         bot.register_next_step_handler((bot.reply_to(message, 'oooops, попробуй еще раз ввести username')), schedule_read)
 
 
@@ -247,14 +252,26 @@ def reply_to_another_user(message):
             bot.send_message(get_ID,
                              "У вас новая прогулка с {} {} в {}".format(message.from_user.first_name, message.from_user.
                                                                         last_name, day))
-            bot.send_message(message.chat.id,
+            last_name = message.contact.last_name
+            if last_name != None:
+                bot.send_message(message.chat.id,
                              "У вас запланированы прогулки с {} {} на следующие дни: {}  ".format(
                                  message.contact.first_name,
-                                 message.contact.last_name)[:-2],
+                                 message.contact.last_name,
                              ''.join(str(x) for x in read_from_DB).
                              replace('(', '').replace(')', '').
-                             replace('\'', '').replace(',', ', ')[:-2]
+                             replace('\'', '').replace(',', ', ')[:-2])
                              )
+            else:
+                last_name = ""
+                bot.send_message(message.chat.id,
+                                 "У вас запланированы прогулки с {} {} на следующие дни: {}  ".format(
+                                     message.contact.first_name,
+                                     last_name,
+                                     ''.join(str(x) for x in read_from_DB).
+                                         replace('(', '').replace(')', '').
+                                         replace('\'', '').replace(',', ', ')[:-2])
+                                 )
             db_worker.close()
         elif (message.content_type == 'text') & (message.text.startswith('@')):
             chat_id = message.chat.id
@@ -275,13 +292,26 @@ def reply_to_another_user(message):
                              "У вас новая прогулка с {} {} в {}".format(message.from_user.first_name, message.from_user.
                                                                         last_name, day))
             user_with = bot.get_chat_member(get_ID, getUserID)
-            bot.send_message(message.chat.id,
+
+            last_name = user_with.user.last_name
+            if last_name != None:
+                bot.send_message(message.chat.id,
                              "У вас запланированы прогулки с {} {} на следующие дни: {}  ".format(
                                  user_with.user.first_name, user_with.user.last_name,
                                  ''.join(str(x) for x in read_from_DB).
                                      replace('(', '').replace(')', '').
                                      replace('\'', '').replace(',', ', ')[:-2]
                              ))
+            else:
+                last_name = ""
+                bot.send_message(message.chat.id,
+                                 "У вас запланированы прогулки с {} {} на следующие дни: {}  ".format(
+                                     user_with.user.first_name, user_with.user.last_name,
+                                     ''.join(str(x) for x in read_from_DB).
+                                         replace('(', '').replace(')', '').
+                                         replace('\'', '').replace(',', ', ')[:-2]
+                                 ))
+
             db_worker.close()
         elif (message.content_type != 'contact') & (message.text != '/cancel') & (message.text.startswith('@') == False):
             chat_id = message.chat.id
@@ -291,6 +321,7 @@ def reply_to_another_user(message):
             msg = bot.reply_to(message, "Отправляю в начало, воспользуйся /start")
             bot.register_next_step_handler(msg, start)
     except Exception as e:
+        print(e)
         bot.register_next_step_handler((bot.reply_to(message, 'oooops, попробуй еще раз ввести username')),
                                    reply_to_another_user)
 
@@ -328,14 +359,28 @@ def reply_to_another_user_about_delete(message):
                                                                           message.from_user.
                                                                           last_name, day_delete))
             read_from_DB = db_worker.read_my_data(username, get_ID)
-            bot.send_message(message.chat.id,
+
+            last_name = message.contact.last_name
+            if last_name != None:
+                bot.send_message(message.chat.id,
                          "У вас запланированы прогулки с {} {} на следующие дни: {}  ".format(
                              message.contact.first_name,
-                             message.contact.last_name)[:-2],
+                             message.contact.last_name,
                          ''.join(str(x) for x in read_from_DB).
                          replace('(', '').replace(')', '').
-                         replace('\'', '').replace(',', ', ')[:-2]
+                         replace('\'', '').replace(',', ', ')[:-2])
                          )
+            else:
+                last_name = ""
+                bot.send_message(message.chat.id,
+                                 "У вас запланированы прогулки с {} {} на следующие дни: {}  ".format(
+                                     message.contact.first_name,
+                                     last_name,
+                                     ''.join(str(x) for x in read_from_DB).
+                                         replace('(', '').replace(')', '').
+                                         replace('\'', '').replace(',', ', ')[:-2])
+                                 )
+
             db_worker.close()
         elif (message.content_type == 'text') & (message.text.startswith('@')):
             chat_id = message.chat.id
@@ -360,12 +405,22 @@ def reply_to_another_user_about_delete(message):
                                                                           last_name, day_delete))
                 read_from_DB = db_worker.read_my_data(username, get_ID)
                 user_with = bot.get_chat_member(get_ID, getUserID)
-                bot.send_message(message.chat.id,
+                last_name = user_with.user.last_name
+                if last_name != None:
+                    bot.send_message(message.chat.id,
                          "У вас запланированы прогулки с {} {} на следующие дни: {}  ".format(
                          user_with.user.first_name, user_with.user.last_name,
                              ''.join(str(x) for x in read_from_DB).
                                  replace('(', '').replace(')', '').
                                  replace('\'', '').replace(',', ', ')[:-2]))
+                else:
+                    last_name = ""
+                    bot.send_message(message.chat.id,
+                                     "У вас запланированы прогулки с {} {} на следующие дни: {}  ".format(
+                                         user_with.user.first_name, last_name,
+                                         ''.join(str(x) for x in read_from_DB).
+                                             replace('(', '').replace(')', '').
+                                             replace('\'', '').replace(',', ', ')[:-2]))
                 db_worker.close()
         elif (message.content_type != 'contact') & (message.text != '/cancel') & (message.text.startswith('@') == False):
             chat_id = message.chat.id
@@ -375,13 +430,32 @@ def reply_to_another_user_about_delete(message):
             msg = bot.reply_to(message, "Отправляю в начало, воспользуйся /start")
             bot.register_next_step_handler(msg, start)
     except Exception as e:
+        print(e)
         bot.register_next_step_handler((bot.reply_to(message, 'oooops, попробуй еще раз ввести username')), reply_to_another_user_about_delete)
 
+
+
+# if __name__ == '__main__':
+#     bot.infinity_polling()
+#
 
 # @bot.message_handler(commands=['getid'])
 # def getuserid(ID):  # Название функции не играет никакой роли, в принципе
 #     userid = ID.chat.id
 
+bot.remove_webhook()
 
-if __name__ == '__main__':
-    bot.polling(none_stop=True)
+# Ставим заново вебхук
+bot.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH,
+                certificate=open(WEBHOOK_SSL_CERT, 'r'))
+
+cherrypy.config.update({
+    'server.socket_host': WEBHOOK_LISTEN,
+    'server.socket_port': WEBHOOK_PORT,
+    'server.ssl_module': 'builtin',
+    'server.ssl_certificate': WEBHOOK_SSL_CERT,
+    'server.ssl_private_key': WEBHOOK_SSL_PRIV
+})
+
+ # Собственно, запуск!
+cherrypy.quickstart(WebhookServer(), WEBHOOK_URL_PATH, {'/': {}})
