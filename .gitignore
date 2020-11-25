@@ -2,3 +2,6 @@
 venv/
 config.py
 *.db
+__pycache__/
+credentials.json
+__pycache__/
