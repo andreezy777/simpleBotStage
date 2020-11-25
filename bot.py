@@ -8,6 +8,7 @@ import telebot
 from SQLite3 import SQLighter
 import logging
 import cherrypy
+import os
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -19,33 +20,35 @@ bot = telebot.TeleBot(config.token)
 day = ''
 day_delete = ''
 
-
-WEBHOOK_HOST = 'scheduler.hmainnetwork.keenetic.pro'
-WEBHOOK_PORT = 8443  # 443, 80, 88 или 8443 (порт должен быть открыт!)
-WEBHOOK_LISTEN = '0.0.0.0'  # На некоторых серверах придется указывать такой же IP, что и выше
-
-WEBHOOK_SSL_CERT = '/home/webhook_cert.pem'  # Путь к сертификату
-WEBHOOK_SSL_PRIV = '/home/webhook_pkey.pem'  # Путь к приватному ключу
-
-WEBHOOK_URL_BASE = "https://%s:%s" % (WEBHOOK_HOST, WEBHOOK_PORT)
-WEBHOOK_URL_PATH = "/%s/" % (config.token)
-
-
-class WebhookServer(object):
-    @cherrypy.expose
-    def index(self):
-        tmpl = loader.load('index.html')
-        if 'content-length' in cherrypy.request.headers and \
-                        'content-type' in cherrypy.request.headers and \
-                        cherrypy.request.headers['content-type'] == 'application/json':
-            length = int(cherrypy.request.headers['content-length'])
-            json_string = cherrypy.request.body.read(length).decode("utf-8")
-            update = telebot.types.Update.de_json(json_string)
-            # Эта функция обеспечивает проверку входящего сообщения
-            bot.process_new_updates([update])
-            #return ''
-        else:
-            raise cherrypy.HTTPError(403)
+#
+# BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+#
+#
+# WEBHOOK_HOST = 'scheduler.hmainnetwork.keenetic.pro'
+# WEBHOOK_PORT = 8443  # 443, 80, 88 или 8443 (порт должен быть открыт!)
+# WEBHOOK_LISTEN = '0.0.0.0'  # На некоторых серверах придется указывать такой же IP, что и выше
+#
+# WEBHOOK_SSL_CERT = os.path.join(BASE_DIR, "webhook_cert.pem")
+# WEBHOOK_SSL_PRIV = os.path.join(BASE_DIR, "webhook_pkey.pem")
+#
+# WEBHOOK_URL_BASE = "https://%s:%s" % (WEBHOOK_HOST, WEBHOOK_PORT)
+# WEBHOOK_URL_PATH = "/%s/" % (config.token)
+#
+#
+# class WebhookServer(object):
+#     @cherrypy.expose
+#     def index(self):
+#         if 'content-length' in cherrypy.request.headers and \
+#                         'content-type' in cherrypy.request.headers and \
+#                         cherrypy.request.headers['content-type'] == 'application/json':
+#             length = int(cherrypy.request.headers['content-length'])
+#             json_string = cherrypy.request.body.read(length).decode("utf-8")
+#             update = telebot.types.Update.de_json(json_string)
+#             # Эта функция обеспечивает проверку входящего сообщения
+#             bot.process_new_updates([update])
+#             return ''
+#         else:
+#             raise cherrypy.HTTPError(403)
 
 
 # @bot.message_handler(content_types=["text"])
@@ -139,7 +142,8 @@ def schedule_read(message):
             userID = message.contact.user_id
             get_ID = db_worker.getID(userID)
             get_ID = "{}".format(''.join(str(x) for x in get_ID).replace('(', '').replace(')', '').replace('\'', '')[:-1])
-            read_from_DB = db_worker.read_my_data(username, get_ID)
+            read_from_DB = db_worker.read_my_data(username, get_ID,user_id)
+            print(read_from_DB)
             last_name = message.contact.last_name
             if last_name != None:
                 bot.send_message(message.chat.id,
@@ -173,7 +177,7 @@ def schedule_read(message):
             getUserID = db_worker.getUserID(get_ID)
             getUserID = "{}".format(
                 ''.join(str(x) for x in getUserID).replace('(', '').replace(')', '').replace('\'', '')[:-1])
-            read_from_DB = db_worker.read_my_data(username, get_ID)
+            read_from_DB = db_worker.read_my_data(username, get_ID,user_id)
             user_with = bot.get_chat_member(get_ID, getUserID)
             last_name = user_with.user.last_name
             if last_name != None:
@@ -187,7 +191,7 @@ def schedule_read(message):
                 last_name = ""
                 bot.send_message(message.chat.id,
                                  "У вас запланированы прогулки с {} {} на следующие дни: {}  ".format(
-                                     user_with.user.first_name, user_with.user.last_name,
+                                     user_with.user.first_name, last_name,
                                      ''.join(str(x) for x in read_from_DB).
                                          replace('(', '').replace(')', '').
                                          replace('\'', '').replace(',', ', ')[:-2]))
@@ -248,7 +252,7 @@ def reply_to_another_user(message):
             get_ID = "{}".format(''.join(str(x) for x in get_ID).replace('(', '').replace(')', '').replace('\'', '')[:-1])
             write_to_DB = db_worker.write_to(chat_id, user_id, username, day, get_ID)
             db_worker.clear(user_id)
-            read_from_DB = db_worker.read_my_data(username, get_ID)
+            read_from_DB = db_worker.read_my_data(username, get_ID,userID)
             bot.send_message(get_ID,
                              "У вас новая прогулка с {} {} в {}".format(message.from_user.first_name, message.from_user.
                                                                         last_name, day))
@@ -287,7 +291,7 @@ def reply_to_another_user(message):
                 ''.join(str(x) for x in getUserID).replace('(', '').replace(')', '').replace('\'', '')[:-1])
             write_to_DB = db_worker.write_to(chat_id, user_id, username, day, get_ID)
             db_worker.clear(user_id)
-            read_from_DB = db_worker.read_my_data(username, get_ID)
+            read_from_DB = db_worker.read_my_data(username, get_ID,user_id)
             bot.send_message(get_ID,
                              "У вас новая прогулка с {} {} в {}".format(message.from_user.first_name, message.from_user.
                                                                         last_name, day))
@@ -306,7 +310,7 @@ def reply_to_another_user(message):
                 last_name = ""
                 bot.send_message(message.chat.id,
                                  "У вас запланированы прогулки с {} {} на следующие дни: {}  ".format(
-                                     user_with.user.first_name, user_with.user.last_name,
+                                     user_with.user.first_name, last_name,
                                      ''.join(str(x) for x in read_from_DB).
                                          replace('(', '').replace(')', '').
                                          replace('\'', '').replace(',', ', ')[:-2]
@@ -358,7 +362,7 @@ def reply_to_another_user_about_delete(message):
                          "У вас отменяется прогулка с {} {}  в {}".format(message.from_user.first_name,
                                                                           message.from_user.
                                                                           last_name, day_delete))
-            read_from_DB = db_worker.read_my_data(username, get_ID)
+            read_from_DB = db_worker.read_my_data(username, get_ID,user_id)
 
             last_name = message.contact.last_name
             if last_name != None:
@@ -403,7 +407,7 @@ def reply_to_another_user_about_delete(message):
                          "У вас отменяется прогулка с {} {}  в {}".format(message.from_user.first_name,
                                                                           message.from_user.
                                                                           last_name, day_delete))
-                read_from_DB = db_worker.read_my_data(username, get_ID)
+                read_from_DB = db_worker.read_my_data(username, get_ID,user_id)
                 user_with = bot.get_chat_member(get_ID, getUserID)
                 last_name = user_with.user.last_name
                 if last_name != None:
@@ -434,28 +438,25 @@ def reply_to_another_user_about_delete(message):
         bot.register_next_step_handler((bot.reply_to(message, 'oooops, попробуй еще раз ввести username')), reply_to_another_user_about_delete)
 
 
-
-# if __name__ == '__main__':
-#     bot.infinity_polling()
-#
-
 # @bot.message_handler(commands=['getid'])
 # def getuserid(ID):  # Название функции не играет никакой роли, в принципе
 #     userid = ID.chat.id
+if __name__ == '__main__':
+    bot.infinity_polling()
+# bot.remove_webhook()
+#
+# # Ставим заново вебхук
+# bot.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH,
+#                 certificate=open(WEBHOOK_SSL_CERT, 'r'))
+#
+# cherrypy.config.update({
+#     'server.socket_host': WEBHOOK_LISTEN,
+#     'server.socket_port': WEBHOOK_PORT,
+#     'server.ssl_module': 'builtin',
+#     'server.ssl_certificate': WEBHOOK_SSL_CERT,
+#     'server.ssl_private_key': WEBHOOK_SSL_PRIV
+# })
+#
+#  # Собственно, запуск!
+# cherrypy.quickstart(WebhookServer(), WEBHOOK_URL_PATH, {'/': {}})
 
-bot.remove_webhook()
-
-# Ставим заново вебхук
-bot.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH,
-                certificate=open(WEBHOOK_SSL_CERT, 'r'))
-
-cherrypy.config.update({
-    'server.socket_host': WEBHOOK_LISTEN,
-    'server.socket_port': WEBHOOK_PORT,
-    'server.ssl_module': 'builtin',
-    'server.ssl_certificate': WEBHOOK_SSL_CERT,
-    'server.ssl_private_key': WEBHOOK_SSL_PRIV
-})
-
- # Собственно, запуск!
-cherrypy.quickstart(WebhookServer(), WEBHOOK_URL_PATH, {'/': {}})
